@@ -160,7 +160,6 @@ class Metro_Has():
 
         x_ac = jnp.stack(x_ac)
         
-        x_ac = x_ac[~jnp.isnan(x_ac)]
         #indices = jnp.arange(len(x_ac))
         #mask = indices % lag == 0
         #x_ac = x_ac[mask]
