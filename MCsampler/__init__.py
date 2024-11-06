@@ -7,22 +7,45 @@ from jax import random
 import timeit
 
 
-
-
 @jit
 def normal(xp,x):
+    '''
+        Evaluates a normal distribution with sigma =1 and centered at xp.
+
+        Parameters:
+            xp (float): Center of the normal distribution.
+            x (float): Point where to evaluate the distribution.
+
+        Returns:
+            n (float): Probability of point x
+
+    '''
+    
     return  1/jnp.sqrt(2*jnp.pi)*jnp.exp(-1/2*(x-xp)**2)
 
 @jit
 def multi_normal(xp, x, D):
-    exponent = -1/2 * jnp.matmul(jnp.matmul(jnp.transpose((xp - x)), jnp.array([[1/2, 0], [0, 1/2]])), (xp - x))
+    '''
+        Evaluates a multivariate normal distribution with sigma = 1/2 * Identity and centered at xp.
+
+        Parameters:
+            xp (array): Center of the distribution.
+            x (array): Point where to evaluate the distribution.
+
+        Returns:
+            n (float): Probability of point x
+
+    '''
+
+    cov = 1/2*jax.numpy.identity(D)
+    exponent = -1/2 * jnp.matmul(jnp.matmul(jnp.transpose((xp - x)), cov), (xp - x))
     return 1/(2 * jnp.pi) ** (D / 2) * jnp.exp(exponent)
 
 
 
 class Metro_Has():
     '''
-        Implementation of the Metropolis-Hastings algorithm to sample from a distribution.
+        Implementation of the Metropolis-Hastings algorithm to sample from a D-dimensional distribution.
 
         Parameters:
             P (function): Distribution to be sampled.
@@ -42,7 +65,7 @@ class Metro_Has():
 
             Parameters:
                 x (array): Current state of the Markov chain.
-                key (scalar array): PRNG key for the random generators.
+                key (array): PRNG key for the random generators.
 
             Returns:
                 xp (array): Sample from the proposal distribution.
@@ -83,10 +106,12 @@ class Metro_Has():
             Checks whether we accept or not the new proposed state in the Markov chain.
 
             Parameters:
+                x (array): Current state of the Markov chain.
                 xp (array): New proposed state of the Markov chain.
-
+                key (array): PRNG key for the random generators.
+                
             Returns:
-                xp (array): Returns the value of xp when it is accepted. Otherwise it returns nothing.
+                xp (array): Returns the value of xp when it is accepted. Otherwise it returns nan.
             
         '''
         alpha = [1]
@@ -100,13 +125,39 @@ class Metro_Has():
     
     
     def step(self, x0, key1, key2):
+        '''
+            Performs an attemp to a step in the Markov chain.
+            
+            Parameters:
+                x0 (array): Current state of the Markov chain.
+                key1 (array): PRNG key for the random generators.
+                key2 (array): PRNG key for the random generators.
+
+            Returns:
+                xp (array): Returns the value of xp when it is accepted. Otherwise it returns nan.
+        '''
+        
 
         xp = self.draw_sample(x0, key1)
         
         return self.acceptance(x0, xp, key2)
 
 
-    def markov_chain(self, x0, keys, burning_keys, lag = 20):
+    def markov_chain(self, x0, keys, burning_keys):
+        '''
+            Performs N attempts of moving along the Markov chain, with N the lenght of keys.
+
+            Parameters:
+                x0 (array): Current state of the Markov chain.
+                keys (array): PRNG keys for the random generators.
+                burning_keys (array): PRNG keys for the random generators used during the burning period.
+                
+            Returns:
+                x_ac (array): Accepted values.
+                
+        '''
+        
+        
         x_ac = []
 
         for i in range(len(burning_keys)//2):
@@ -119,28 +170,22 @@ class Metro_Has():
             x_ac.append(x_n)
 
         x_ac = jnp.stack(x_ac)
-        
-        #indices = jnp.arange(len(x_ac))
-        #mask = indices % lag == 0
-        #x_ac = x_ac[mask]
-
-     
 
         return x_ac
 
 
     
-    def sample(self, x0, Nt, burn = 50, lag = 20):
+    def sample(self, x0, Nt, burn = 50):
         '''
-            Returns N samples from the distribution.
+            Returns ~Nt samples from the distribution.
 
             Parameters:
                 x0 (array): Initial state.
-                N (int): Number of samples to be retrieved from the distribution.
-                burn (int, optional): Number of steps in the burning stage. The default value is 100.
+                Nt (int): Approximate number of samples to be retrieved from the distribution. The sampling will always return a number close to but larger than Nt.
+                burn (int, optional): Number of steps in the burning stage. The default value is 50.
 
             Returns:
-                xs (array): N samples of the target distribution.
+                u (array): ~Nt samples of the target distribution.
         '''
         
         Nt = int(Nt)
@@ -162,7 +207,7 @@ class Metro_Has():
             bkeys = jnp.array(bkeys).reshape(Nc,2*burn, 2)
             
             _x0 = jnp.expand_dims(x0,0).repeat(Nc, axis=0)
-            u_p = jax.vmap(lambda x, y, z: self.markov_chain(x, y, z, lag = lag))(_x0,keys,bkeys)
+            u_p = jax.vmap(lambda x, y, z: self.markov_chain(x, y, z))(_x0,keys,bkeys)
             u_p = u_p[~jnp.isnan(u_p)]
             u = jnp.concatenate((u,u_p))
             x0 = u[-self.D:]
