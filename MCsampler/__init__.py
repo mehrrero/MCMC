@@ -20,46 +20,6 @@ def multi_normal(xp, x, D):
 
 
 
-
-class MCMC():
-    '''
-        Class wrapping the sampling method.
-
-        Parameters:
-            P (function): Distribution to be sampled.
-            D (int): Dimensionality of base space.
-            method (str, optional): Sampling method to be used. For now it only allows for Metropolis-Hastings 'MH'.
-        
-    '''
-
-    
-    def __init__(self, P, D, method = 'MH'):
-        super(MCMC, self).__init__()
-
-        if method == 'MH':
-            self.sampler = Metro_Has(P,D)
-
-        else:
-            print('Method not available')
-
-
-    def sample(self, x0, N, burn = 100):
-        '''
-            Returns N samples from the distribution, starting from the point x0.
-
-            Parameters:
-                x0 (array): Initial state.
-                N (int): Number of samples to be retrieved from the distribution.
-                burn (int, optional): Number of steps in the burning stage. The default value is 100.
-
-            Returns:
-                xs (array): N samples of the target distribution.
-        '''
-
-        return self.sampler.sample(x0, N, burn = burn)
-        
-
-
 class Metro_Has():
     '''
         Implementation of the Metropolis-Hastings algorithm to sample from a distribution.
@@ -192,7 +152,7 @@ class Metro_Has():
         start = timeit.default_timer()
         u = jnp.array([])
         
-        while len(u) < Nt:
+        while len(u) < self.D*Nt:
             keys = random.split(self.key, 2 * Nc * N + 1)
             self.key, *keys = keys
             keys = jnp.array(keys).reshape(Nc, 2 * N, 2)
@@ -201,18 +161,23 @@ class Metro_Has():
             self.key, *bkeys = bkeys
             bkeys = jnp.array(bkeys).reshape(Nc,2*burn, 2)
             
-            _x0 = x0*jnp.ones(Nc)
+            _x0 = jnp.expand_dims(x0,0).repeat(Nc, axis=0)
             u_p = jax.vmap(lambda x, y, z: self.markov_chain(x, y, z, lag = lag))(_x0,keys,bkeys)
             u_p = u_p[~jnp.isnan(u_p)]
             u = jnp.concatenate((u,u_p))
-            x0 = u[-1]
+            x0 = u[-self.D:]
+            if self.D == 1:
+                x0 = x0.item()
 
         stop = timeit.default_timer()
         dt = (stop - start) 
+        
+        if self.D>1:
+            u = u.reshape(u.shape[0]//self.D,self.D)
+        
 
         print(f'{len(u)} points accepted in {dt} s.')
         return u
-
 
 
 

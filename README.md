@@ -14,5 +14,3 @@ This package contains a simple implementation of a Markov chain Monte Carlo algo
 ## Usage
 
 You can find the main class wrapper inside the MCsampler main file. So far, only the Metropolis-Hastings algorithm is implemented. It can be called with `sampler = MCsampler.Metro_Has(P,D)`, where $P(x)$ is the target distribution and $D$ the number of dimensions. The sampler can be later called with `sampler.sample(x0, N)` to draw $~N$ samples from the initial state $x_0$. A `demo.ipynb` notebook with examples is provided.
-
-For now it only works with $D=1$. Support for $D>1$ will be implemented soon.
