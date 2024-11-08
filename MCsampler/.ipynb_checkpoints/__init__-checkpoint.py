@@ -23,7 +23,7 @@ def normal(xp,x):
     
     return  1/jnp.sqrt(2*jnp.pi)*jnp.exp(-1/2*(x-xp)**2)
 
-@jit
+
 def multi_normal(xp, x, D):
     '''
         Evaluates a multivariate normal distribution with sigma = 1/2 * Identity and centered at xp.
@@ -76,7 +76,7 @@ class Metro_Has():
             xp = jax.random.normal(key)
 
         if self.D >1:
-            xp = jax.random.multivariate_normal(key, x, jnp.array([[1,0],[0,1]]))
+            xp = jax.random.multivariate_normal(key, x, jax.numpy.identity(self.D))
         return xp
 
     
@@ -143,7 +143,7 @@ class Metro_Has():
         return self.acceptance(x0, xp, key2)
 
 
-    def markov_chain(self, x0, keys, burning_keys):
+    def markov_chain(self, x0, key, N, burning = 50):
         '''
             Performs N attempts of moving along the Markov chain, with N the lenght of keys.
 
@@ -160,12 +160,14 @@ class Metro_Has():
         
         x_ac = []
 
-        for i in range(len(burning_keys)//2):
-            x_n = self.step(x0, burning_keys[2*i], burning_keys[2*i+1])
+        for i in range(burning):
+            key, subkey1, subkey2 = random.split(key, 3)
+            x_n = self.step(x0, subkey1, subkey2)
             x0 = jnp.where(~jnp.any(jnp.isnan(x_n)), x_n, x0)
         
-        for i in range(len(keys)//2):
-            x_n = self.step(x0, keys[2*i], keys[2*i+1]) 
+        for i in range(N):
+            key, subkey1, subkey2 = random.split(key, 3)
+            x_n = self.step(x0,subkey1, subkey2) 
             x0 = jnp.where(~jnp.any(jnp.isnan(x_n)), x_n, x0)
             x_ac.append(x_n)
 
@@ -175,7 +177,7 @@ class Metro_Has():
 
 
     
-    def sample(self, x0, Nt, burn = 50):
+    def sample(self, x0, Nt, burning = 50):
         '''
             Returns ~Nt samples from the distribution.
 
@@ -198,16 +200,12 @@ class Metro_Has():
         u = jnp.array([])
         
         while len(u) < self.D*Nt:
-            keys = random.split(self.key, 2 * Nc * N + 1)
+            keys = random.split(self.key, Nc + 1)
             self.key, *keys = keys
-            keys = jnp.array(keys).reshape(Nc, 2 * N, 2)
-
-            bkeys = random.split(self.key, 2*Nc*burn+1)
-            self.key, *bkeys = bkeys
-            bkeys = jnp.array(bkeys).reshape(Nc,2*burn, 2)
+            keys = jnp.array(keys)
             
             _x0 = jnp.expand_dims(x0,0).repeat(Nc, axis=0)
-            u_p = jax.vmap(lambda x, y, z: self.markov_chain(x, y, z))(_x0,keys,bkeys)
+            u_p = jax.vmap(lambda x, y: self.markov_chain(x, y, N, burning = burning))(_x0,keys)
             u_p = u_p[~jnp.isnan(u_p)]
             u = jnp.concatenate((u,u_p))
             x0 = u[-self.D:]
